@@ -4,6 +4,15 @@ Processing Sun images captured by Dwarf3 telescope
 
 ## work in progress ...
 
+## Somehow finished
+
+### sun_parallactic_angle
+
+generates map of parallactic angle of Sun for given location 
+
+![Prague–Hostivař](./docsrc/fig/parallactic_angle_2026_prague.png){width=70%}
+
+
 ## Ideas what to develop
 
 ### Load of source images to SunSpotter working area

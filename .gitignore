@@ -212,6 +212,7 @@ _to_work_on/
 # private exclusions 
 #-----------------------------------------------------
 # Directories
+data/**
 .bck/**
 #.temp/**
 #docsrc/_build/**
