@@ -175,7 +175,8 @@ def sun_parallactic_map_vectorized(
     plt.xlabel("Hour of day (UTC)")
     plt.ylabel("Day of year")
     plt.title(
-        f"Sun parallactic angle map — {locname} — {year}\n"
+        f"Sun parallactic angle map — {locname} — {year}\n"+
+        f"Location: Latitude={lat:.4f}°  Longitude={lon:.4f}°\n"+
         "Color = PA, black = PA isolines, red = altitude, blue = azimuth"
     )
 
@@ -196,13 +197,6 @@ def sun_parallactic_map_vectorized(
     ax2.set_yticks(month_starts)
     ax2.set_yticklabels(month_labels)
     ax2.set_ylabel("Month")
-
-    foot = f"Location: Latitude={lat:.4f}°  Longitude={lon:.4f}°"
-    fig.text(
-    0.2, -0.01,  # x,y in figure coords
-    foot, ha="center", va="bottom",
-    fontsize=10, color="gray"
-    )
 
     plt.tight_layout()
     if pngout:

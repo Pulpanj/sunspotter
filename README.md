@@ -1,6 +1,6 @@
 # SunSpotter
 
-Processing Sun images captured by Dwarf3 telescope
+Processing images of the Sun taken with the Dwarf 3 telescope
 
 ## work in progress ...
 
