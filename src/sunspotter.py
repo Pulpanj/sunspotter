@@ -9,9 +9,12 @@ from email import parser
 import os
 import sys
 from zipfile import Path
-import sunspotter_load
-
 from rich_argparse import RawDescriptionRichHelpFormatter, RichHelpFormatter, RawTextRichHelpFormatter
+
+# %%-----------------------------------------------------------------------------
+import sunspotter_load
+import sunspotter_crop
+
 #
 # from rich_argparse.contrib import ExtendedParagraphRichHelpFormatter
 # %%-----------------------------------------------------------------------------
@@ -65,13 +68,63 @@ def cmd_doc(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
         if name == "doc":
             continue
         # print("\n" + "=" * 72)
-        print(f"--- {name} command --- \n")
+        print(f"\n\n--- {name} command --- \n")
         subparser.prog = f"{PROG_NAME} {name}"
         subparser.print_help()
 
 # %% [markdown]
 #  example how to test argparse apps with pytest
 # https://pythontest.com/testing-argparse-apps/
+# %%-----------------------------------------------------------------------------
+
+
+def valid_latitude(value):
+    float_value = float(value)
+    if float_value < -90.0 or float_value > 90.0:
+        raise argparse.ArgumentTypeError(
+            f"Latitude must be between -90 and 90. Got: {value}")
+    return float_value
+
+
+def valid_longitude(value):
+    float_value = float(value)
+    if float_value < -180.0 or float_value > 180.0:
+        raise argparse.ArgumentTypeError(
+            f"Longitude must be between -180 and 180. Got: {value}")
+    return float_value
+
+
+def parse_idselect(s):
+    """
+    Parse --idselect [1,3,5-12,20] into a list of integers.
+    Supports:
+      - single ints: 3
+      - ranges: 5-12
+      - comma-separated lists inside brackets
+    """
+    s = s.strip()
+
+    # Remove optional surrounding brackets
+    if s.startswith("[") and s.endswith("]"):
+        s = s[1:-1]
+
+    result = []
+
+    for part in s.split(","):
+        part = part.strip()
+        if "-" in part:
+            start, end = map(int, part.split("-"))
+            if start > end:
+                raise argparse.ArgumentTypeError(f"Invalid range: {part}")
+            result.extend(range(start, end + 1))
+        else:
+            result.append(int(part))
+
+    return result
+
+
+# %%-----------------------------------------------------------------------------
+
 # ===============================================================================
 # Parser definition
 # ===============================================================================
@@ -82,18 +135,18 @@ def build_parser() -> argparse.ArgumentParser:
         prog=PROG_NAME,
         description="""SunSpotter: Processing images of the Sun from the Dwarf telescope\n\n
 
-A utility for loading, processing, and analyzing Dwarf solar imaging datasets.
+A utility for loading, processing, and analyzing FITS images of the Sun captured with the Dwarf telescope..
 
-Use `sunspotter doc` to print full documentation.
-Or try `sunspotter CMD --help ` for detailed documentation about command CMD
+Use `sunspotter doc` to display the full documentation.
+Or run `sunspotter CMD --help` for detailed information about a specific command.
 """,
         epilog="""
 \n\n
 Notes:
-- Defaults for all paths are relative to the data root
+- Defaults for all paths are relative to the data root, use / as directory separator
 - Tested with files from Dwarf3 telescope, but should work with Dwarf2 as well
 
-\nProudly written by hand of Jarda Pulpan.\n
+\nProudly handmade by Jarda Pulpan.\n
 """,
         # formatter_class=RichHelpFormatter,
         formatter_class=RawTextRichHelpFormatter
@@ -136,6 +189,13 @@ Notes:
         default="2099-12-31",
         type=datetime.datetime.fromisoformat,
         help='End of capture date range, use ISOformat: YYYY-MM-DD or YYYY-MM-DD:HH:mm:ss (default: 2099-12-31)'
+    )
+
+    parser.add_argument(
+        "--idselect",
+        type=parse_idselect,
+        default=None,
+        help="Select source file IDs, e.g. --idselect [1,3,5-12,20] (default=None)"
     )
 
     subparsers = parser.add_subparsers(
@@ -212,12 +272,167 @@ It optionally moves source files to a new location, but by default it just copie
             bckdir=args.bckdir,
         )
     )
-    return parser
 
+    # -------------------------------------------------------------------------------
+    # crop command
+    # -------------------------------------------------------------------------------
+    p_process = subparsers.add_parser(
+        "location",
+        help="defines named location with LAT/LON in database table locations",
+        description="""
+Save named location into database table locations to be used for crop command.
+
+- Format of Earth equatorial coordinates:
+   Latitude (–90° to +90°, North positive) and 
+   Longitude (–180° to +180°, East positive), 
+   expressed as floating‑point values in decimal degrees.
+
+        """,
+        formatter_class=RawDescriptionRichHelpFormatter,
+    )
+
+    # Mutually exclusive: either --list OR (name+lat+lon)
+    p_process.add_argument(
+        "--list", 
+        action="store_true",
+        help="List all saved locations (default: False)"
+    )
+
+    # These are optional here, but validated later
+    p_process.add_argument(  # "--name", help="Location name")
+        # p_process.add_argument(
+        "--loc",
+        default=None,
+        help="Name of the observation site to be saved into location table (required if not --list only)",
+    )
+
+    # p_loc.add_argument("--lat", type=float,
+    #                    help="Latitude in decimal degrees")
+    # p_loc.add_argument("--lon", type=float,
+    #                    help="Longitude in decimal degrees")
+
+    # p_process.add_argument(
+    #     "--loc",
+    #     required=True,
+    #     help="Name of the observation site to be saved into location table (required)",
+    # )
+
+    p_process.add_argument(
+        "--lat",
+        type=valid_latitude,
+        default=None,
+        help="Latitude  (-90 to 90) of the observation site (required if LOC provided )",
+    )
+
+    p_process.add_argument(
+        "--lon",
+        type=valid_longitude,
+        default=None,
+        help="Longitude (-180 to 180) of the observation site (required if LOC provided )",
+    )
+
+    p_process.set_defaults(
+        func=lambda args:
+        sunspotter_crop.location(
+            verbose=args.verbose,
+            dbfilename=args.dbfilename,
+            lat=args.lat,
+            lon=args.lon,
+            loc=args.loc,
+            list=args.list
+        )
+    )
+
+    # -------------------------------------------------------------------------------
+    # crop command
+    # -------------------------------------------------------------------------------
+    p_process = subparsers.add_parser(
+        "crop",
+        help="Rotate and crop files from working directory to crop directory",
+        description="""
+Identify Sun in source images, rotate it by parallactic angle, crop image and save them to crop directory.
+
+- Rotation is defined by parallactic angle, that is calculated from the observation location (parameters LAT/LON) and observation time (DATE_OBS in FITS header). 
+- Observation location name could be defined by `sunspotter location` command that stores named location with LAT/LON in database table locations.
+- Parameter ANGLE could be used to correct parallactic angle (or set parallactic angle if location is not provided).
+- Format of Earth equatorial coordinates:
+   Latitude (–90° to +90°, North positive) and 
+   Longitude (–180° to +180°, East positive), 
+   expressed as floating‑point values in decimal degrees.
+
+- Images to be processes are selected by date range (global arguments DATE_FROM, DATE_TO) or by selecting set of source file IDs using global argument IDSELECT.
+        """,
+        formatter_class=RawDescriptionRichHelpFormatter,
+    )
+    p_process.add_argument(
+        "--wrkdir",
+        default=None,
+        help="Working directory of files loaded from Dwarf source directory DWARF,(default: DATAROOT/source)"
+    )
+    p_process.add_argument(
+        "--cropdir",
+        default=None,
+        help="Directory of cropped files (default: DATAROOT/crop)"
+    )
+
+    p_process.add_argument(
+        "-a", "--angle",
+        default=0,
+        type=float,
+        help="Correction of the parallactic angle computed from geographic longitude and latitude, or direct assignment of the parallactic angle when the observation site was not provided. (default: 0)",
+    )
+
+    p_process.add_argument(
+        "--loc",
+        default=None,
+        help="Name of the observation site to be read from location table (default: none )",
+    )
+
+    p_process.add_argument(
+        "--lat",
+        type=valid_latitude,
+        default=None,
+        help="Latitude  (-90 to 90) of the observation site (default: None )",
+    )
+
+    p_process.add_argument(
+        "--lon",
+        type=valid_longitude,
+        default=None,
+        help="Longitude (-180 to 180) of the observation site (default: None )",
+    )
+
+    p_process.add_argument(
+        "-s", "--size",
+        default=400,
+        type=int,
+        help="Side length (in pixels) of the square cropped image (default: 400)",
+    )
+
+    p_process.set_defaults(
+        func=lambda args:
+        sunspotter_crop.crop(
+            verbose=args.verbose,
+            date_from=args.date_from,
+            date_to=args.date_to,
+            idselect=args.idselect,
+            # ids=args.ids,
+            dbfilename=args.dbfilename,
+            wrkdir=args.wrkdir,
+            cropdir=args.cropdir,
+            angle=args.angle,
+            size=args.size,
+            lat=args.lat,
+            lon=args.lon,
+            loc=args.loc
+        )
+    )
+    return parser
 
 # %%-----------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------
+
 
 def main(argv=None) -> int:
 
@@ -234,17 +449,17 @@ def main(argv=None) -> int:
         else:
             return os.path.normpath(os.path.join(os.getcwd(), value))
 
-
     def set_default_dirs(args):
 
         def set_default_arg(arg, value, arg_name, default_dir, default_suffix):
             if arg == arg_name:
                 if value is None:
-                    value = expand_optional(default_dir + '/' + default_suffix)
+                    value = expand_optional(
+                        default_dir + '/' + default_suffix)
                 else:
                     value = expand_optional(value)
                     # value = str(expand_optional(default_dir)) + default_suffix
-                setattr(args, arg,value)
+                setattr(args, arg, value)
                 if args.verbose:
                     print(f"->{arg} expanded to: {getattr(args, arg)}")
 
@@ -265,6 +480,8 @@ def main(argv=None) -> int:
                             args.dataroot, "/source")
             set_default_arg(arg, value, "dwarf",
                             args.dataroot, "/dwarf ")
+            set_default_arg(arg, value, "cropdir",
+                            args.dataroot, "/crop ")
             set_default_arg(arg, value, "bckdir",
                             args.dataroot, "/dwarf_bck ")
 
@@ -310,8 +527,8 @@ def test_sunspotter():
     ])
 
 
-test_sunspotter()
+# test_sunspotter()
 # %%-----------------------------------------------------------------------------
-# if __name__ == "__main__":
-#     raise SystemExit(main())
+if __name__ == "__main__":
+    raise SystemExit(main())
 # %%-----------------------------------------------------------------------------

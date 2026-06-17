@@ -172,7 +172,7 @@ def list_duckdb_tables(db_path):
 # %%-----------------------------------------------------------------------------
 
 
-def insert_fits_headers_from_filelist(db_path, wrkdir, files_list, header_table="fits_headers"):
+def insert_FITS_headers_from_filelist(db_path, wrkdir, files_list, header_table="FITS_headers"):
     con = duckdb.connect(str(db_path))
 
     con.execute(f"""
@@ -197,9 +197,9 @@ def insert_fits_headers_from_filelist(db_path, wrkdir, files_list, header_table=
         f"Inserting FITS headers for {len(files_list)} files into table {header_table}...")
     # 4) Loop over files
     for id_file, filename in files_list:
-        fits_path = Path(wrkdir) / filename
+        FITS_path = Path(wrkdir) / filename
 
-        if not fits_path.is_file():
+        if not FITS_path.is_file():
             Verbose.print(f"WARNING: missing FITS file: {fits_path}")
             continue
 
@@ -356,11 +356,16 @@ def scan_and_store_files(
                 naxis = safe_get(hdr, "NAXIS", int)
                 naxis1 = safe_get(hdr, "NAXIS1", int)
                 naxis2 = safe_get(hdr, "NAXIS2", int)
+                object = safe_get(hdr, "OBJECT", str)
 
                 valid = True
 
         except Exception as e:
             Verbose.print(f"WARNING: invalid FITS file {path}: {e}")
+
+        # Skip files not capturing Sun
+        if object != "Sun":
+            continue
 
         # Determine new filename based on timestamp
         ts = timestamp_from_dateobs(
@@ -536,13 +541,13 @@ def load(
     )
 
     scan_and_store_files(
-        dwarf,  "stacked*.fits", 
+        dwarf,  "stacked*.FITS", 
         dbfilename, wrkdir, bckdir,
         date_from=date_from,
         date_to=date_to,
-        backup=backup, table="stacked_files", header_table="fits_headers")
+        backup=backup, table="stacked_files", header_table="FITS_headers")
     show_table(dbfilename, table_name="stacked_files")
-    show_table(dbfilename, table_name="fits_headers")
+    show_table(dbfilename, table_name="FITS_headers")
 
 # %%-----------------------------------------------------------------------------
 
@@ -570,9 +575,4 @@ def test_load():
 if __name__ == "__main__":
     test_load()
 # %%-----------------------------------------------------------------------------
-# df = show_table("../data/db/sunspotter.db", table_name="stacked_files")
-# df = show_table("../data/db/sunspotter.db", table_name="fits_headers")
-# fits_headers = show_table("../data/db/sunspotter.db", table_name="app_log")
-# df.info()
-# df.head(100)
-# %%-----------------------------------------------------------------------------
+
