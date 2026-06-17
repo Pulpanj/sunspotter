@@ -210,7 +210,7 @@ def load_fits_rgb16(fits_file):
         raise ValueError("Tento FITS není RGB stack ani Bayer RAW.")
     r, g, b = extract_rgb_channels(rgb)
     # !!!
-    rgb[:, :, 1] //= 2
+    # rgb[:, :, 1] //= 2
     return rgb, r, g, b, header
 
 
@@ -262,36 +262,50 @@ def rgb16_to_qimage(rgb16):
 # %%-----------------------------------------------------------------------------
 
 class HistogramControlPanel(QWidget):
+    def reset_params(self):
+        params = {
+            "xmin": "0",
+            "xmax": "65500",
+            "ymax": "",
+            "yscale": "log"
+        }
+        self.xmin_edit.setText(params["xmin"])
+        self.xmax_edit.setText(params["xmax"])
+        self.ymax_edit.setText(params["ymax"])
+        self.scale_combo.setCurrentText(params["yscale"])
+        self.apply_clicked()
+        return params
+    
     def __init__(
         self, parent=None, on_apply=None,
-        def_params=None
+        # def_params=None
     ):
         super().__init__(parent)
 
         self.on_apply = on_apply  # callback function
 
         layout = QVBoxLayout(self)
-        print(def_params["xmax"])
+        # print(def_params["xmax"])
         # --- X range ---
         x_layout = QHBoxLayout()
         x_layout.addWidget(QLabel("xmin:"))
-        self.xmin_edit = QLineEdit(str(def_params["xmin"]))
+        self.xmin_edit = QLineEdit("")
         x_layout.addWidget(self.xmin_edit)
 
         x_layout.addWidget(QLabel("xmax:"))
-        self.xmax_edit = QLineEdit(str(def_params["xmax"]))
+        self.xmax_edit = QLineEdit("")
         x_layout.addWidget(self.xmax_edit)
 
         layout.addLayout(x_layout)
 
         # --- Y max ---
-        if def_params["ymax"] is None:
-            ymax = ""
-        else:
-            ymax = str(def_params["ymax"])
+        # if def_params["ymax"] is None:
+        #     ymax = ""
+        # else:
+        #     ymax = str(def_params["ymax"])
         y_layout = QHBoxLayout()
         y_layout.addWidget(QLabel("ymax:"))
-        self.ymax_edit = QLineEdit(ymax)
+        self.ymax_edit = QLineEdit("")
         y_layout.addWidget(self.ymax_edit)
         layout.addLayout(y_layout)
 
@@ -301,9 +315,10 @@ class HistogramControlPanel(QWidget):
         self.scale_combo = QComboBox()
         self.scale_combo.addItems(["linear", "log"])
         # Set initial value
-        self.scale_combo.setCurrentText(def_params["yscale"])
+        self.scale_combo.setCurrentText("log")
         scale_layout.addWidget(self.scale_combo)
         layout.addLayout(scale_layout)
+        self.params=self.reset_params()
 
         # # --- Apply button ---
         # self.apply_btn = QPushButton("Apply")
@@ -316,13 +331,15 @@ class HistogramControlPanel(QWidget):
         self.xmax_edit.returnPressed.connect(self.apply_clicked)
         self.ymax_edit.returnPressed.connect(self.apply_clicked)
         self.scale_combo.activated.connect(self.apply_clicked)
+        
+
 
     def apply_clicked(self):
         """Collect parameters and call callback."""
         params = {
-            "xmin": int(self.xmin_edit.text()),
-            "xmax": int(self.xmax_edit.text()),
-            "ymax": None if self.ymax_edit.text() == "" else int(self.ymax_edit.text()),
+            "xmin": float(self.xmin_edit.text()),
+            "xmax": float(self.xmax_edit.text()),
+            "ymax": "" if self.ymax_edit.text() == "" else float(self.ymax_edit.text()),
             "yscale": self.scale_combo.currentText()
         }
         if self.on_apply:
@@ -351,12 +368,13 @@ class MatplotlibCanvas(FigureCanvasQTAgg):
     # ---------------------------------------------------------
 
     def update_histogram(self, r, g, b, params):
+        # xmin = self.parent.hist_controls.xmin_edit.getText()
         xmin = params["xmin"]
         xmax = params["xmax"]
         ymax = params["ymax"]
         yscale = params["yscale"]
-
-
+        print("param", params)
+        print('up',r)
         self.ax_r=self.ax[0]
         self.ax_g=self.ax[1]
         self.ax_b=self.ax[2]
@@ -394,24 +412,27 @@ class MatplotlibCanvas(FigureCanvasQTAgg):
         xr, yr = count_values_remove_zero_counts(r)
         xg, yg = count_values_remove_zero_counts(g)
         xb, yb = count_values_remove_zero_counts(b)
+        print('xr',xr,xr.shape)
+        print('yr',yr,yr.shape,xmin,xmax)
         # -----------------------------------------------------
         # Draw scatter for each channel
         # -----------------------------------------------------
         self.ax_r.scatter(xr, yr, s=1, color="red", alpha=0.9)
         self.ax_g.scatter(xg, yg, s=1, color="green", alpha=0.9)
         self.ax_b.scatter(xb, yb, s=1, color="blue", alpha=0.9)
-
         # -----------------------------------------------------
         # Apply axis settings
         # -----------------------------------------------------
         for ax in (self.ax_r, self.ax_g, self.ax_b):
-            ax.set_xlim(xmin, xmax)
+            print('set',xmin,xmax,type(xmin),type(xmax))
+            ax.set_xlim(float(xmin), int(xmax))
             ax.set_yscale(yscale)
             ax.grid(True, alpha=0.3)
-
-            if ymax is not None:
-                ax.set_ylim(0, ymax)
-
+            if ymax !="":
+                print('ymax',ymax)
+                ax.set_ylim(0, int(ymax))
+        # self.draw()
+        # return
         # Titles
         # self.ax_r.set_title("R channel")
         # self.ax_g.set_title("G channel")
@@ -643,6 +664,13 @@ class MainWindow(QMainWindow):
 
         # 4) statusbar info
         self.statusBar().showMessage(f"Loaded: {filename}")
+        self.header_panel.setText(
+            header_to_string(self.last_file, self.header)
+        )
+        self.params=self.hist_controls.reset_params()
+        self.hist_canvas.update_histogram(
+            self.r, self.g, self.b,self.params)
+
 
     def open_file_dialog(self):
         filename, _ = QFileDialog.getOpenFileName(
@@ -655,8 +683,10 @@ class MainWindow(QMainWindow):
             self.last_dir = os.path.dirname(filename)
             self.last_file = os.path.basename(filename)
             self.load_image_to_label(filename)
+            self.params=self.hist_controls.reset_params()
+            print(self.r.shape,self.g.shape,self.b.shape)
             self.hist_canvas.update_histogram(
-                self.r, self.g, self.b, self.def_params)
+                self.r, self.g, self.b, self.params)
 
     def __init__(self, argv):
         super().__init__()
@@ -688,23 +718,17 @@ class MainWindow(QMainWindow):
         # self.hist_canvas.plot_example()   # draw initial graph
         hist_panel = self.hist_canvas
 
-        self.def_params = {
-            "xmin": 0,
-            "xmax": 65535,
-            "ymax": None,
-            "yscale": "log"
-        }
 
         # --- Histogram control panel ---
         self.hist_controls = HistogramControlPanel(
             on_apply=self.on_hist_params,
-            def_params=self.def_params
+            # params=self.params
         )
 
         self.header_panel = QTextEdit()
         self.header_panel.setReadOnly(True)
         self.header_panel.setStyleSheet(
-            "background-color: #203040; color: white; "
+            "background-color: #203040; color: yellow; "
             "font-family: Consolas; font-size: 12px;"
         )
         self.header_panel.setText("")
@@ -721,7 +745,7 @@ class MainWindow(QMainWindow):
         split1 = QSplitter(Qt.Orientation.Horizontal)
         split1.addWidget(self.image_view)
         split1.addWidget(split2)
-        split1.setSizes([1000, 300])
+        split1.setSizes([1000, 400])
 
         layout.addWidget(split1)
         self.setCentralWidget(panel)
@@ -749,12 +773,14 @@ class MainWindow(QMainWindow):
             self.last_dir = os.path.dirname(arg1)
             self.last_file = os.path.basename(arg1)
             # filename=arg1
+            # print("self.params",self.params)
             self.load_image_to_label(arg1)
-        self.header_panel.setText(
-            header_to_string(self.last_file, self.header)
-        )
+        # self.header_panel.setText(
+        #     header_to_string(self.last_file, self.header)
+        # )
+        print("self.params",self.params,self.r)
         self.hist_canvas.update_histogram(
-            self.r, self.g, self.b, self.def_params)
+            self.r, self.g, self.b, self.params)
 
     def update_pixel_info(self, x, y):
         if 0 <= x < self.rgb16.shape[1] and 0 <= y < self.rgb16.shape[0]:
@@ -779,7 +805,7 @@ def main():
     # Simulate argv during debugging (optional)
 
     if len(sys.argv) == 1:
-        sys.argv.append(f)
+        sys.argv.append(fpng)
 
     # arg1 = sys.argv[1] if len(sys.argv) > 1 else None
 
