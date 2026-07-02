@@ -1,4 +1,6 @@
 # %%-----------------------------------------------------------------------------
+from operator import pos
+
 from PyQt6.QtCore import Qt, QPointF
 from PyQt6.QtGui import QPixmap, QWheelEvent, QMouseEvent
 from PyQt6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
@@ -275,7 +277,7 @@ class HistogramControlPanel(QWidget):
         self.scale_combo.setCurrentText(params["yscale"])
         self.apply_clicked()
         return params
-    
+
     def __init__(
         self, parent=None, on_apply=None,
         # def_params=None
@@ -318,7 +320,7 @@ class HistogramControlPanel(QWidget):
         self.scale_combo.setCurrentText("log")
         scale_layout.addWidget(self.scale_combo)
         layout.addLayout(scale_layout)
-        self.params=self.reset_params()
+        self.params = self.reset_params()
 
         # # --- Apply button ---
         # self.apply_btn = QPushButton("Apply")
@@ -331,8 +333,6 @@ class HistogramControlPanel(QWidget):
         self.xmax_edit.returnPressed.connect(self.apply_clicked)
         self.ymax_edit.returnPressed.connect(self.apply_clicked)
         self.scale_combo.activated.connect(self.apply_clicked)
-        
-
 
     def apply_clicked(self):
         """Collect parameters and call callback."""
@@ -374,10 +374,10 @@ class MatplotlibCanvas(FigureCanvasQTAgg):
         ymax = params["ymax"]
         yscale = params["yscale"]
         print("param", params)
-        print('up',r)
-        self.ax_r=self.ax[0]
-        self.ax_g=self.ax[1]
-        self.ax_b=self.ax[2]
+        print('up', r)
+        self.ax_r = self.ax[0]
+        self.ax_g = self.ax[1]
+        self.ax_b = self.ax[2]
 
         # Clear axes
         self.ax_r.clear()
@@ -393,7 +393,6 @@ class MatplotlibCanvas(FigureCanvasQTAgg):
             y = counts[x]
             return x, y
 
-
         def count_values_remove_zero_counts(c):
             """ Mám pole x a pole count. Chci odstranit všechny prvky, kde count == 0,
             a odstranit stejné indexy i v x. Vytvořit nové x2, y2 bez nul.
@@ -407,13 +406,13 @@ class MatplotlibCanvas(FigureCanvasQTAgg):
             y = c_counts[mask]
             # print(x.shape, y.shape)
             return x, y
-        
+
         # Compute histograms
         xr, yr = count_values_remove_zero_counts(r)
         xg, yg = count_values_remove_zero_counts(g)
         xb, yb = count_values_remove_zero_counts(b)
-        print('xr',xr,xr.shape)
-        print('yr',yr,yr.shape,xmin,xmax)
+        print('xr', xr, xr.shape)
+        print('yr', yr, yr.shape, xmin, xmax)
         # -----------------------------------------------------
         # Draw scatter for each channel
         # -----------------------------------------------------
@@ -424,12 +423,12 @@ class MatplotlibCanvas(FigureCanvasQTAgg):
         # Apply axis settings
         # -----------------------------------------------------
         for ax in (self.ax_r, self.ax_g, self.ax_b):
-            print('set',xmin,xmax,type(xmin),type(xmax))
+            print('set', xmin, xmax, type(xmin), type(xmax))
             ax.set_xlim(float(xmin), int(xmax))
             ax.set_yscale(yscale)
             ax.grid(True, alpha=0.3)
-            if ymax !="":
-                print('ymax',ymax)
+            if ymax != "":
+                print('ymax', ymax)
                 ax.set_ylim(0, int(ymax))
         # self.draw()
         # return
@@ -452,9 +451,12 @@ class MatplotlibCanvas(FigureCanvasQTAgg):
         bmin, bmax, bmean = stats(xb)
 
         # --- Subtitles ---
-        self.ax_r.set_title(f"Red:  min={rmin}  max={rmax}  dcount={rmean:.1f}")
-        self.ax_g.set_title(f"Green:min={gmin}  max={gmax}  dcount={gmean:.1f}")
-        self.ax_b.set_title(f"Blue: min={bmin}  max={bmax}  dcount={bmean:.1f}")
+        self.ax_r.set_title(
+            f"Red:  min={rmin}  max={rmax}  dcount={rmean:.1f}")
+        self.ax_g.set_title(
+            f"Green:min={gmin}  max={gmax}  dcount={gmean:.1f}")
+        self.ax_b.set_title(
+            f"Blue: min={bmin}  max={bmax}  dcount={bmean:.1f}")
         # self.ax_r.text(
         #     0.5, 0.82,
         #     f"min={rmin}  max={rmax}  mean={rmean:.1f}",
@@ -536,6 +538,14 @@ class ImageView(QGraphicsView):
 
         self._zoom = 0
 
+    def get_zoom_window(self):
+        rect = self.mapToScene(self.viewport().rect()).boundingRect()
+        x1 = rect.left()
+        y1 = rect.bottom()     # lower-left
+        x2 = rect.right()
+        y2 = rect.top()        # upper-right
+        return x1, y1, x2, y2
+
     def setImage(self, qimg):
         pix = QPixmap.fromImage(qimg)
         self.pixmap_item.setPixmap(pix)
@@ -587,6 +597,11 @@ class ImageView(QGraphicsView):
         if self._zoom < -10:
             self._zoom = -10
             return
+        if self.pixel_callback is not None:
+            # pos = self.mapToScene(event.pos())
+            # x = int(pos.x())
+            # y = int(pos.y())
+            self.pixel_callback(None, None)
 
         self.scale(factor, factor)
 
@@ -667,10 +682,9 @@ class MainWindow(QMainWindow):
         self.header_panel.setText(
             header_to_string(self.last_file, self.header)
         )
-        self.params=self.hist_controls.reset_params()
+        self.params = self.hist_controls.reset_params()
         self.hist_canvas.update_histogram(
-            self.r, self.g, self.b,self.params)
-
+            self.r, self.g, self.b, self.params)
 
     def open_file_dialog(self):
         filename, _ = QFileDialog.getOpenFileName(
@@ -683,8 +697,8 @@ class MainWindow(QMainWindow):
             self.last_dir = os.path.dirname(filename)
             self.last_file = os.path.basename(filename)
             self.load_image_to_label(filename)
-            self.params=self.hist_controls.reset_params()
-            print(self.r.shape,self.g.shape,self.b.shape)
+            self.params = self.hist_controls.reset_params()
+            print(self.r.shape, self.g.shape, self.b.shape)
             self.hist_canvas.update_histogram(
                 self.r, self.g, self.b, self.params)
 
@@ -717,7 +731,6 @@ class MainWindow(QMainWindow):
         self.hist_canvas = MatplotlibCanvas()
         # self.hist_canvas.plot_example()   # draw initial graph
         hist_panel = self.hist_canvas
-
 
         # --- Histogram control panel ---
         self.hist_controls = HistogramControlPanel(
@@ -778,14 +791,70 @@ class MainWindow(QMainWindow):
         # self.header_panel.setText(
         #     header_to_string(self.last_file, self.header)
         # )
-        print("self.params",self.params,self.r)
+        print("self.params", self.params, self.r)
         self.hist_canvas.update_histogram(
             self.r, self.g, self.b, self.params)
 
     def update_pixel_info(self, x, y):
-        if 0 <= x < self.rgb16.shape[1] and 0 <= y < self.rgb16.shape[0]:
-            r, g, b = self.rgb16[y, x]
-            self.statusBar().showMessage(f"x={x}, y={y}, R={r}, G={g}, B={b}")
+        if not (x is None or y is None):
+            if 0 <= x < self.rgb16.shape[1] and 0 <= y < self.rgb16.shape[0]:
+                r, g, b = self.rgb16[y, x]
+                self.r = r
+                self.g = g
+                self.b = b
+                self.x = x
+                self.y = y
+            else:
+                r, g, b = self.r, self.g, self.b
+                x, y = self.x, self.y
+        else:
+            r, g, b = self.r, self.g, self.b
+            x, y = self.x, self.y
+
+        # just to ensure the view is updated
+        x1, y1, x2, y2 = self.image_view.get_zoom_window()
+        if x1 < 0:
+            x2 = x2+x1
+            x1 = 0
+
+        if y2 < 0:
+            y1 = y1+y2
+            y2 = 0
+        if x2 > self.rgb16.shape[1]:
+            # x1 = x1 + (self.rgb16.shape[1]-x2)
+            x2 = self.rgb16.shape[1]
+        if y1 > self.rgb16.shape[0]:
+            # y2 = y2 + (self.rgb16.shape[0]-y1)
+            y1 = self.rgb16.shape[0]
+
+
+        x_str = f"{x:6.0f}"
+        y_str = f"{y:6.0f}"
+        r16_str = f"{r:6.0f}"
+        g16_str = f"{g:6.0f}"
+        b16_str = f"{b:6.0f}"
+        x1_str = f"{x1:6.0f}"
+        y1_str = f"{y1:6.0f}"
+        x2_str = f"{x2:6.0f}"
+        y2_str = f"{y2:6.0f}"
+        dx=f"{x2-x1:6.0f}"
+        dy=f"{y1-y2:6.0f}"
+
+        line = (
+            f"x:{x_str:<10}"        # x at column 1–6
+            f" y:{y_str:<10}"        # y at column 7–12
+            f" R:{r16_str:<10}"      # r16 at column 13–20
+            f" G:{g16_str:<10}"      # g16 at column 21–28
+            f" B:{b16_str:<10}"      # b16 at column 29–36
+            f"      Zoom>"     # Zoom label at column 37–46
+            f"  Left,Top:[{x1_str:<8},"        # x at column 1–6
+            f"{y2_str:<8}]"        # y at column 7–12
+            f"  Right,Bottom:[{x2_str:<8},"        # x at column 1–6
+            f"{y1_str:<8}]"        # y at column 7–12
+            f"  Size:[{dx:<8},{dy:<8}]"
+        )
+
+        self.statusBar().showMessage(line)
 
     def on_hist_params(self, params):
         if hasattr(self, "r"):
